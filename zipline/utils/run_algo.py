@@ -24,6 +24,7 @@ from zipline.algorithm_live import LiveTradingAlgorithm
 from zipline.data.bundles.core import load
 from zipline.data.data_portal import DataPortal
 from zipline.data.data_portal_live import DataPortalLive
+from zipline.data.data_portal_alpaca import DataPortalAlpaca
 from zipline.finance.trading import TradingEnvironment
 from zipline.pipeline.data import USEquityPricing
 from zipline.pipeline.loaders import USEquityPricingLoader
@@ -122,42 +123,20 @@ def _run(handle_data,
         else:
             click.echo(algotext)
 
+    from zipline.assets.assets_alpaca import AssetFinderAlpaca
+    asset_finder = AssetFinderAlpaca(broker)
+    print("loaded asset cache", len(asset_finder._asset_cache))
+
     if bundle is not None:
-        bundle_data = load(
-            bundle,
-            environ,
-            bundle_timestamp,
+
+        env = TradingEnvironment(asset_db_path=None, environ=environ)
+        env.asset_finder = asset_finder
+
+        data = DataPortalAlpaca(
+            broker, asset_finder, get_calendar("NYSE"),
         )
 
-        prefix, connstr = re.split(
-            r'sqlite:///',
-            str(bundle_data.asset_finder.engine.url),
-            maxsplit=1,
-        )
-        if prefix:
-            raise ValueError(
-                "invalid url %r, must begin with 'sqlite:///'" %
-                str(bundle_data.asset_finder.engine.url),
-            )
-        env = TradingEnvironment(asset_db_path=connstr, environ=environ)
-        first_trading_day =\
-            bundle_data.equity_minute_bar_reader.first_trading_day
-
-        DataPortalClass = (partial(DataPortalLive, broker)
-                           if broker
-                           else DataPortal)
-        data = DataPortalClass(
-            env.asset_finder, get_calendar("NYSE"),
-            first_trading_day=first_trading_day,
-            equity_minute_reader=bundle_data.equity_minute_bar_reader,
-            equity_daily_reader=bundle_data.equity_daily_bar_reader,
-            adjustment_reader=bundle_data.adjustment_reader
-        )
-
-        pipeline_loader = USEquityPricingLoader(
-            bundle_data.equity_daily_bar_reader,
-            bundle_data.adjustment_reader,
-        )
+        # pipeline_loader = AlpacaUSEquityPricingLoader(broker)
 
         def choose_loader(column):
             if column in USEquityPricing.columns:

@@ -45,7 +45,7 @@ CACHE_FILE_TEMPLATE = '/tmp/.%s-%s.v7.cache'
 
 cdef class Asset:
 
-    cdef readonly int sid
+    cdef readonly object sid
     # Cached hash of self.sid
     cdef int sid_hash
 
@@ -73,7 +73,7 @@ cdef class Asset:
     })
 
     def __init__(self,
-                 int sid, # sid is required
+                 object sid, # sid is required
                  object exchange, # exchange is required
                  object symbol="",
                  object asset_name="",
@@ -109,42 +109,36 @@ cdef class Asset:
         Cython rich comparison method.  This is used in place of various
         equality checkers in pure python.
         """
-        cdef int x_as_int, y_as_int
+        cdef object x_as_id, y_as_id
 
         try:
-            x_as_int = PyNumber_Index(x)
+            x_as_id = x.sid
+        except AttributeError:
+            x_as_id = x
         except (TypeError, OverflowError):
             return NotImplemented
 
         try:
-            y_as_int = PyNumber_Index(y)
+            y_as_id = y.sid
+        except AttributeError:
+            y_as_id = x
         except (TypeError, OverflowError):
             return NotImplemented
-
-        compared = x_as_int - y_as_int
 
         # Handle == and != first because they're significantly more common
         # operations.
         if op == Py_EQ:
-            return compared == 0
+            return x_as_id == y_as_id
         elif op == Py_NE:
-            return compared != 0
-        elif op == Py_LT:
-            return compared < 0
-        elif op == Py_LE:
-            return compared <= 0
-        elif op == Py_GT:
-            return compared > 0
-        elif op == Py_GE:
-            return compared >= 0
+            return x_as_id != y_as_id
         else:
-            raise AssertionError('%d is not an operator' % op)
+            return x_as_id == y_as_id
 
     def __str__(self):
         if self.symbol:
-            return '%s(%d [%s])' % (type(self).__name__, self.sid, self.symbol)
+            return '%s(%s [%s])' % (type(self).__name__, self.sid, self.symbol)
         else:
-            return '%s(%d)' % (type(self).__name__, self.sid)
+            return '%s(%s)' % (type(self).__name__, self.sid)
 
     def __repr__(self):
         attrs = ('symbol', 'asset_name', 'exchange',
@@ -153,7 +147,7 @@ cdef class Asset:
                   for attr in attrs)
         strings = ('%s=%s' % (t[0], t[1]) for t in tuples)
         params = ', '.join(strings)
-        return 'Asset(%d, %s)' % (self.sid, params)
+        return 'Asset(%s, %s)' % (self.sid, params)
 
     cpdef __reduce__(self):
         """
@@ -241,7 +235,7 @@ cdef class Equity(Asset):
                   for attr in attrs)
         strings = ('%s=%s' % (t[0], t[1]) for t in tuples)
         params = ', '.join(strings)
-        return 'Equity(%d, %s)' % (self.sid, params)
+        return 'Equity(%s, %s)' % (self.sid, params)
 
     property security_start_date:
         """
@@ -303,7 +297,7 @@ cdef class Future(Asset):
     })
 
     def __init__(self,
-                 int sid, # sid is required
+                 object sid, # sid is required
                  object exchange, # exchange is required
                  object symbol="",
                  object root_symbol="",
@@ -352,7 +346,7 @@ cdef class Future(Asset):
                   for attr in attrs)
         strings = ('%s=%s' % (t[0], t[1]) for t in tuples)
         params = ', '.join(strings)
-        return 'Future(%d, %s)' % (self.sid, params)
+        return 'Future(%s, %s)' % (self.sid, params)
 
     cpdef __reduce__(self):
         """

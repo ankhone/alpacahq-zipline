@@ -12,23 +12,35 @@
 # limitations under the License.
 
 from zipline.data.data_portal import DataPortal
-
+from zipline.utils.memoize import weak_lru_cache
 from logbook import Logger
 
-log = Logger('DataPortalLive')
+log = Logger('DataPortalAlpaca')
 
 
-class DataPortalLive(DataPortal):
-    def __init__(self, broker, asset_finder, calendar):
+class DataPortalAlpaca(DataPortal):
+
+    def __init__(self, broker, asset_finder, trading_calendar):
         self.broker = broker
         self.asset_finder = asset_finder
-        self.calendar = calendar
+        self.trading_calendar = trading_calendar
 
     def get_last_traded_dt(self, asset, dt, data_frequency):
         return self.broker.get_last_traded_dt(asset)
 
     def get_spot_value(self, assets, field, dt, data_frequency):
         return self.broker.get_spot_value(assets, field, dt, data_frequency)
+
+    def get_splits(self, assets, dt):
+        # right now data portal does not support splits, positions' shares are
+        # automatically adjusted by brokerage.
+        return None
+
+
+    @weak_lru_cache(10)
+    def _get_realtime_bars(self, assets, frequency, bar_count):
+        return self.broker.get_realtime_bars(
+            assets, frequency, bar_count=bar_count)
 
     def get_history_window(self,
                            assets,
@@ -38,37 +50,19 @@ class DataPortalLive(DataPortal):
                            field,
                            data_frequency,
                            ffill=True):
-        # This method is responsible for merging the ingested historical data
-        # with the real-time collected data through the Broker.
-        # DataPortal.get_history_window() is called with ffill=False to mark
-        # the missing fields with NaNs. After merge on the historical and
-        # real-time data the missing values (NaNs) are filled based on their
-        # next available values in the requested time window.
-        #
-        # Warning: setting ffill=True in DataPortal.get_history_window() call
-        # results a wrong behavior: The last available value reported by
-        # get_spot_value() will be used to fill the missing data - which is
-        # always representing the current spot price presented by Broker.
 
-        historical_bars = super(DataPortalLive, self).get_history_window(
-            assets, end_dt, bar_count, frequency, field, data_frequency,
-            ffill=False)
-
-        realtime_bars = self.broker.get_realtime_bars(
-            assets, frequency)
+        # convert list of asset to tuple of asset to be hashable
+        assets = tuple(assets)
 
         # Broker.get_realtime_history() returns the asset as level 0 column,
         # open, high, low, close, volume returned as level 1 columns.
         # To filter for field the levels needs to be swapped
-        realtime_bars = realtime_bars.swaplevel(0, 1, axis=1)
+        bars = self._get_realtime_bars(
+            assets, frequency, bar_count=bar_count).swaplevel(0, 1, axis=1)
 
         ohlcv_field = 'close' if field == 'price' else field
 
-        # TODO: end_dt is ignored when historical & realtime bars are merged.
-        # Should not cause issues as end_dt is set to current time in live
-        # trading, but would be more proper if merge would make use of it.
-        combined_bars = historical_bars.combine_first(
-            realtime_bars[ohlcv_field])
+        bars = bars[ohlcv_field]
 
         if ffill and field == 'price':
             # Simple forward fill is not enough here as the last ingested
@@ -77,7 +71,7 @@ class DataPortalLive(DataPortal):
             # To provide values for such cases we backward fill.
             # Backward fill as a second operation will have no effect if the
             # forward-fill was successful.
-            combined_bars.fillna(method='ffill', inplace=True)
-            combined_bars.fillna(method='bfill', inplace=True)
+            bars.fillna(method='ffill', inplace=True)
+            bars.fillna(method='bfill', inplace=True)
 
-        return combined_bars[-bar_count:]
+        return bars[-bar_count:]

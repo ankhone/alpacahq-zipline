@@ -142,6 +142,12 @@ class LiveTradingAlgorithm(TradingAlgorithm):
     def updated_account(self):
         return self.broker.account
 
+    def before_trading_start(self, data):
+        print("running before_trading_start")
+        self.data_portal.asset_finder.clear_cache()
+        print("done clear cache")
+        super(self.__class__, self).before_trading_start(data)
+
     @api_method
     @allowed_only_in_before_trading_start(
         ScheduleFunctionOutsideTradingStart())

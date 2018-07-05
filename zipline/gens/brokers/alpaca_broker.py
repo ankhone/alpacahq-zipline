@@ -23,6 +23,7 @@ from zipline.finance.execution import (MarketOrder,
 from zipline.finance.transaction import Transaction
 from zipline.api import symbol as symbol_lookup
 from zipline.errors import SymbolNotFound
+from zipline.assets import Equity
 import pandas as pd
 import numpy as np
 import uuid
@@ -55,6 +56,13 @@ class ALPACABroker(Broker):
         '''Do nothing to comply the interface'''
         pass
 
+    def get_equities(self):
+        return [
+            Equity(asset.id, asset.exchange, symbol=asset.symbol, asset_name=asset.symbol)
+            for asset in self._api.list_assets(asset_class='us_equity')
+        ]
+
+    @property
     def subscribed_assets(self):
         '''Do nothing to comply the interface'''
         return []
@@ -71,7 +79,7 @@ class ALPACABroker(Broker):
                 z_position = zp.Position(symbol_lookup(symbol))
             except SymbolNotFound:
                 continue
-            z_position.amount = pos.qty
+            z_position.amount = int(pos.qty)
             z_position.cost_basis = float(pos.cost_basis)
             z_position.last_sale_price = None
             z_position.last_sale_date = None
@@ -256,10 +264,7 @@ class ALPACABroker(Broker):
             for symbol in symbols
         ]
 
-    def get_realtime_bars(self, assets, data_frequency):
-        # TODO: cache the result. The caller
-        # (DataPortalLive#get_history_window) makes use of only one
-        # column at a time.
+    def get_realtime_bars(self, assets, data_frequency, bar_count=500):
         assets_is_scalar = not isinstance(assets, (list, set, tuple))
         is_daily = 'd' in data_frequency  # 'daily' or '1d'
         if assets_is_scalar:
@@ -268,9 +273,10 @@ class ALPACABroker(Broker):
             symbols = [asset.symbol for asset in assets]
         timeframe = '1D' if is_daily else '1Min'
 
-        bars_list = self._api.list_bars(symbols, timeframe, limit=500)
+        bars_list = self._api.list_bars(symbols, timeframe, limit=bar_count)
         bars_map = {a.symbol: a for a in bars_list}
         dfs = []
+
         for asset in assets if not assets_is_scalar else [assets]:
             symbol = asset.symbol
             df = bars_map[symbol].df.copy()
@@ -279,4 +285,8 @@ class ALPACABroker(Broker):
                     'utc').tz_convert('America/New_York')
             df.columns = pd.MultiIndex.from_product([[asset, ], df.columns])
             dfs.append(df)
-        return pd.concat(dfs, axis=1)
+
+        if len(dfs) > 0:
+            return pd.concat(dfs, axis=1)
+
+        return pd.DataFrame()
