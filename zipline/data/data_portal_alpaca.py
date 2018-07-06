@@ -15,6 +15,8 @@ from zipline.data.data_portal import DataPortal
 from zipline.utils.memoize import weak_lru_cache
 from logbook import Logger
 
+import pandas as pd
+
 log = Logger('DataPortalAlpaca')
 
 
@@ -36,9 +38,14 @@ class DataPortalAlpaca(DataPortal):
         # automatically adjusted by brokerage.
         return None
 
+    def get_adjustments(self, assets, field, dt, perspective_dt):
+        # hack not to provide adjustment, as upstream provides adjusted pricing.
+        return pd.Series([
+            1 for i in assets
+        ], index=assets)
 
     @weak_lru_cache(10)
-    def _get_realtime_bars(self, assets, frequency, bar_count):
+    def _get_realtime_bars(self, assets, frequency, bar_count, end_dt):
         return self.broker.get_realtime_bars(
             assets, frequency, bar_count=bar_count)
 
@@ -58,7 +65,7 @@ class DataPortalAlpaca(DataPortal):
         # open, high, low, close, volume returned as level 1 columns.
         # To filter for field the levels needs to be swapped
         bars = self._get_realtime_bars(
-            assets, frequency, bar_count=bar_count).swaplevel(0, 1, axis=1)
+            assets, frequency, bar_count=bar_count, end_dt=end_dt).swaplevel(0, 1, axis=1)
 
         ohlcv_field = 'close' if field == 'price' else field
 
