@@ -49,6 +49,9 @@ class DataPortalAlpaca(DataPortal):
         return self.broker.get_realtime_bars(
             assets, frequency, bar_count=bar_count)
 
+    def cache_clear(self):
+        return self._get_realtime_bars.cache_clear()
+
     def get_history_window(self,
                            assets,
                            end_dt,

@@ -103,6 +103,9 @@ class AlgorithmSimulator(object):
 
         def every_bar(dt_to_use, current_data=self.current_data,
                       handle_data=algo.event_manager.handle_data):
+
+            self.data_portal.clear_cache()
+
             # called every tick (minute or day).
             algo.on_dt_changed(dt_to_use)
 
