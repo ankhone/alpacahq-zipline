@@ -275,14 +275,33 @@ class ALPACABroker(Broker):
 
         bars_list = self._api.list_bars(symbols, timeframe, limit=bar_count)
         bars_map = {a.symbol: a for a in bars_list}
-        dfs = []
 
+        if is_daily:
+            intra_bars = {}
+            intra_list = self._api.list_bars(symbols, '1Min', limit=1000)
+            for bars in intra_list:
+                symbol = bars.symbol
+                df = _fix_tz(bars.df)
+                mask = (df.index.time >= pd.Timestamp('9:30').time()) & (df.index.time < pd.Timestamp('16:00').time())
+                agged = df[mask].resample('1D').agg(dict(
+                    open='first',
+                    high='max',
+                    low='min',
+                    close='last',
+                    volume='sum',
+                )).dropna()
+                intra_bars[symbol] = agged
+
+        dfs = []
         for asset in assets if not assets_is_scalar else [assets]:
             symbol = asset.symbol
             df = bars_map[symbol].df.copy()
-            if df.index.tz is None:
-                df.index = df.index.tz_localize(
-                    'utc').tz_convert('America/New_York')
+            df = _fix_tz(df)
+            if is_daily:
+                agged = intra_bars[symbol]
+                if agged.index[-1] not in df.index:
+                    assert agged.index[-1] > df.index[-1]
+                    df = df.append(agged.iloc[-1])
             df.columns = pd.MultiIndex.from_product([[asset, ], df.columns])
             dfs.append(df)
 
@@ -290,3 +309,9 @@ class ALPACABroker(Broker):
             return pd.concat(dfs, axis=1)
 
         return pd.DataFrame()
+
+
+def _fix_tz(df):
+    if df.index.tz is None:
+        df.index = df.index.tz_localize('utc').tz_convert('America/New_York')
+    return df
