@@ -59,6 +59,8 @@ class BlotterLive(Blotter):
         assert order_id is None
 
         order = self.broker.order(asset, amount, style)
+        if order is None:
+            return None
         self.new_orders.append(order)
 
         return order.id

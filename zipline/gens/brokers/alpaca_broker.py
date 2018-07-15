@@ -12,6 +12,7 @@
 # limitations under the License.
 
 import alpaca_trade_api as tradeapi
+from alpaca_trade_api.rest import APIError
 from zipline.gens.brokers.broker import Broker
 import zipline.protocol as zp
 from zipline.finance.order import (Order as ZPOrder,
@@ -178,18 +179,22 @@ class ALPACABroker(Broker):
             id=zp_order_id,
         )
 
-        order = self._api.submit_order(
-            symbol=symbol,
-            qty=qty,
-            side=side,
-            type=order_type,
-            time_in_force='day',
-            limit_price=limit_price,
-            stop_price=stop_price,
-            client_order_id=zp_order.id,
-        )
-        zp_order = self._order2zp(order)
-        return zp_order
+        try:
+            order = self._api.submit_order(
+                symbol=symbol,
+                qty=qty,
+                side=side,
+                type=order_type,
+                time_in_force='day',
+                limit_price=limit_price,
+                stop_price=stop_price,
+                client_order_id=zp_order.id,
+            )
+            zp_order = self._order2zp(order)
+            return zp_order
+        except APIError as e:
+            log.warning('order is rejected {}'.format(e))
+            return None
 
     @property
     def orders(self):
