@@ -81,7 +81,7 @@ class ALPACABroker(Broker):
             except SymbolNotFound:
                 continue
             z_position.amount = int(pos.qty)
-            z_position.cost_basis = float(pos.cost_basis)
+            z_position.cost_basis = float(pos.cost_basis) / float(pos.qty)
             z_position.last_sale_price = None
             z_position.last_sale_date = None
             z_positions[symbol_lookup(symbol)] = z_position

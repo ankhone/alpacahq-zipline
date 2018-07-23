@@ -36,31 +36,31 @@ class AssetFinderAlpaca:
         self.broker = broker
 
     def clear_cache(self):
-        self.asset_cache_ = None
+        del self.asset_cache
 
     @property
     def _asset_cache(self):
-        if hasattr(self, 'asset_cache_'):
-            return self.asset_cache_
+        if hasattr(self, 'asset_cache'):
+            return self.asset_cache
 
-        self.asset_cache_ = {
+        self.asset_cache = {
             asset.sid: asset
             for asset in self.broker.get_equities()
         }
 
-        return self.asset_cache_
+        return self.asset_cache
 
     @lazyval
     def symbol_ownership_map(self):
         return {
             split_delimited_symbol(v.symbol): v
-            for k, v in self.asset_cache_.items()
+            for k, v in self._asset_cache.items()
         }
 
     @lazyval
     def fuzzy_symbol_ownership_map(self):
         m = {}
-        for (cs, scs), v in iteritems(symbol_ownership_map):
+        for (cs, scs), v in iteritems(self.symbol_ownership_map):
             m[cs + scs] = v
         return m
 
