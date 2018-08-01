@@ -124,12 +124,14 @@ class AlgorithmSimulator(object):
 
             blotter.prune_orders(closed_orders)
 
+            orders = blotter.orders
             for transaction in new_transactions:
                 perf_tracker.process_transaction(transaction)
 
                 # since this order was modified, record it
-                order = blotter.orders[transaction.order_id]
-                perf_tracker.process_order(order)
+                if transaction.order_id in orders:
+                    order = blotter.orders[transaction.order_id]
+                    perf_tracker.process_order(order)
 
             if new_commissions:
                 for commission in new_commissions:
