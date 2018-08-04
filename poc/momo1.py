@@ -177,6 +177,7 @@ def buy(context, data):
         #     continue
         high_15min = context.high_15min[stock]
         if current > high_15min:
+            print('{}: {:.02f}%'.format(stock.symbol, pct_change * 100))
             stop_price = find_stop(stock, context, data)
             if stop_price is None:
                 print('could not find stop_price for {}'.format(stock.symbol))
@@ -187,9 +188,16 @@ def buy(context, data):
             context.stop_prices[stock] = stop_price
             context.target_prices[stock] = current + (current - stop_price) * 3
             context.entry_timestamps[stock] = get_datetime()
+            
+            close = data.history(stock, 'close', 3000, '1m').dropna()
+            macd_raw, signal, hist = talib.MACD(close.values, fastperiod=13,
+                                            slowperiod=21, signalperiod=8)
+            if hist[-1] < 0:
+                log.info('not to buy: MACD < 0')
+                continue
+
             risk = 0.02
             shares = pvalue * risk // (current - stop_price)
-            
             ## DEBUG ##
             if shares * current > 100:
                 shares = 100 // current

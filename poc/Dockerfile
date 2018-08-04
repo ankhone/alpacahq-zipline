@@ -15,7 +15,7 @@
 #
 #    docker exec -it zipline zipline run -f /projects/my_algo.py --start 2015-1-1 --end 2016-1-1 /projects/result.pickle
 #
-FROM python:3.5
+FROM python:3.6
 
 #
 # set up environment
@@ -58,11 +58,11 @@ RUN pip install 'numpy>=1.11.1,<2.0.0' \
   && pip install matplotlib \
   && pip install jupyter
 
-RUN pip install alpaca-trade-api==0.14.0
-
 ADD requirements.txt /tmp/requirements.txt
-RUN pip uninstall -y ta-lib && pip install ta-lib --no-cache-dir
 RUN pip install -r /tmp/requirements.txt --no-cache-dir
+RUN pip uninstall -y ta-lib && pip install ta-lib --no-cache-dir
+RUN pip install alpaca-trade-api==0.16.0
+
 
 EXPOSE ${NOTEBOOK_PORT}
 

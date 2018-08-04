@@ -16,6 +16,7 @@ from numpy import (
     uint32,
 )
 
+import alpaca_trade_api as tradeapi
 from zipline.data.us_equity_pricing import (
     BcolzDailyBarReader,
     SQLiteAdjustmentReader,
@@ -37,11 +38,13 @@ class USEquityPricingLoader(PipelineLoader):
     """
 
     def __init__(self, raw_price_loader, adjustments_loader):
-        self.raw_price_loader = raw_price_loader
-        self.adjustments_loader = adjustments_loader
+        # self.raw_price_loader = raw_price_loader
+        # self.adjustments_loader = adjustments_loader
 
-        cal = self.raw_price_loader.trading_calendar or \
-            get_calendar("NYSE")
+        # cal = self.raw_price_loader.trading_calendar or \
+        #     get_calendar("NYSE")
+
+        cal = get_calendar('NYSE')
 
         self._all_sessions = cal.all_sessions
 
@@ -72,6 +75,36 @@ class USEquityPricingLoader(PipelineLoader):
         start_date, end_date = _shift_dates(
             self._all_sessions, dates[0], dates[-1], shift=1,
         )
+
+        api = tradeapi.REST()
+        _from = start_date.strftime('%Y-%m-%d')
+        to = end_date.strftime('%Y-%m-%d')
+        sessions = self._all_sessions
+        sessions = sessions[(sessions >= start_date) & (sessions <= end_date)]
+        dfs = []
+        for asset in assets:
+            df = api.polygon.historic_agg('day', asset.symbol, _from=_from, to=to).df
+            df = df.reindex(sessions, method='ffill')
+            dfs.append(df)
+
+        raw_arrays = {}
+        for c in columns:
+            colname = c.name
+            raw_arrays[colname] = np.array([
+                df[colname].values for df in dfs
+            ])
+        out = {}
+        for c in columns:
+            c_raw = raw_arrays[c.name]
+            out[c] = AdjustedArray(
+                c_raw.astype(c.dtype),
+                mask,
+                [],
+                c.missing_value
+            )
+        return out
+
+            
         colnames = [c.name for c in columns]
         raw_arrays = self.raw_price_loader.load_raw_arrays(
             colnames,

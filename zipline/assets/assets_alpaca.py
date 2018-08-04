@@ -1,4 +1,5 @@
 import numpy as np
+import pandas as pd
 from six import iteritems
 
 from .assets import AssetFinder
@@ -272,3 +273,7 @@ class AssetFinderAlpaca:
             ('start', '<i8'),
             ('end', '<i8'),
         ])
+
+    def lifetimes(self, dates, include_start_date):
+        assets = [asset for asset in self._asset_cache.values()]
+        return pd.DataFrame(True, index=dates, columns=assets)
