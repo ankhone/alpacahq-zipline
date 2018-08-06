@@ -34,15 +34,14 @@ from .base import PipelineLoader
 
 UINT32_MAX = iinfo(uint32).max
 
-def get_stockprices(symbols, chartrange='1y'):
+
+def get_stockprices(symbols, chart_range='1y'):
     '''Get stock data (key stats and previous) from IEX.
     Just deal with IEX's 99 stocks limit per request.
     '''
-    partlen = 99
-    result = {}
 
     def get_chart(symbols):
-        charts = iexfinance.Stock(symbols).get_chart(range=chartrange)
+        charts = iexfinance.Stock(symbols).get_chart(range=chart_range)
         result = {}
         for symbol, obj in charts.items():
             df = pd.DataFrame(
@@ -56,11 +55,12 @@ def get_stockprices(symbols, chartrange='1y'):
     result = {}
     with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
         tasks = []
+        partlen = 99
         for i in range(0, len(symbols), partlen):
             part = symbols[i:i + partlen]
             task = executor.submit(get_chart, part)
             tasks.append(task)
-        
+
         total_count = len(symbols)
         report_percent = 10
         processed = 0
@@ -73,14 +73,9 @@ def get_stockprices(symbols, chartrange='1y'):
                 print('{:.2f}% completed'.format(percent))
                 last_print_percent = percent
                 report_percent = (percent + 10.0) // 10 * 10
-            '''
-            except Exception as exc:
-                print('%r generated an exception: %s' % (url, exc))
-            else:
-                print('%r page is %d bytes' % (url, len(data)))
-            '''
 
     return result
+
 
 class USEquityPricingLoader(PipelineLoader):
     """
@@ -116,15 +111,28 @@ class USEquityPricingLoader(PipelineLoader):
             a.symbol for a in asset_finder.retrieve_all(assets)
         ]
         symbols = list(set(iex_symbols) & set(asset_symbols))
-        # print('len(symbols) = {}'.format(len(symbols)))
+        print('len(symbols) = {}'.format(len(symbols)))
         # TODO: dynamic "range"
-        prices = get_stockprices(symbols)
+        chart_range = '1m'
+        timedelta = pd.Timestamp.utcnow() - start_date
+        if timedelta > pd.Timedelta('730 days'):
+            chart_range = '5y'
+        elif timedelta > pd.Timedelta('365 days'):
+            chart_range = '2y'
+        elif timedelta > pd.Timedelta('180 days'):
+            chart_range = '1y'
+        elif timedelta > pd.Timedelta('90 days'):
+            chart_range = '6m'
+        elif timedelta > pd.Timedelta('30 days'):
+            chart_range = '3m'
+        print('chart_range={}'.format(chart_range))
+        prices = get_stockprices(symbols, chart_range=chart_range)
 
         dfs = []
         for symbol in asset_symbols:
             if symbol not in prices:
                 df = pd.DataFrame(
-                    {c.name: c.missing_value for c in columns}, 
+                    {c.name: c.missing_value for c in columns},
                     index=sessions
                 )
             else:
