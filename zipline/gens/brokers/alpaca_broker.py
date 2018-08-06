@@ -61,6 +61,7 @@ class ALPACABroker(Broker):
         return [
             Equity(asset.id, asset.exchange, symbol=asset.symbol, asset_name=asset.symbol)
             for asset in self._api.list_assets(asset_class='us_equity')
+            if asset.tradable and asset.status == 'active'
         ]
 
     @property

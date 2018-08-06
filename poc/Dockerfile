@@ -62,6 +62,7 @@ ADD requirements.txt /tmp/requirements.txt
 RUN pip install -r /tmp/requirements.txt --no-cache-dir
 RUN pip uninstall -y ta-lib && pip install ta-lib --no-cache-dir
 RUN pip install alpaca-trade-api==0.16.0
+RUN pip install iexfinance
 
 
 EXPOSE ${NOTEBOOK_PORT}

@@ -96,14 +96,14 @@ class AssetFinderAlpaca:
                 hits[sid] = self._asset_cache[sid]
             except KeyError:
                 if not default_none:
-                    failures.append(sid)
+                    failures.add(sid)
                 else:
                     hits[sid] = None
 
         if len(failures) > 0:
             raise SidsNotFound(sids=list(failures))
 
-        return [hits for sid in sids]
+        return [hits[sid] for sid in sids]
 
     def retrieve_asset(self, sid, default_none=False):
         """
@@ -275,5 +275,5 @@ class AssetFinderAlpaca:
         ])
 
     def lifetimes(self, dates, include_start_date):
-        assets = [asset for asset in self._asset_cache.values()]
+        assets = self.sids
         return pd.DataFrame(True, index=dates, columns=assets)

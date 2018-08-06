@@ -16,7 +16,12 @@ from numpy import (
     uint32,
 )
 
+import concurrent.futures
+import numpy as np
+
 import alpaca_trade_api as tradeapi
+import iexfinance
+import pandas as pd
 from zipline.data.us_equity_pricing import (
     BcolzDailyBarReader,
     SQLiteAdjustmentReader,
@@ -29,6 +34,53 @@ from .base import PipelineLoader
 
 UINT32_MAX = iinfo(uint32).max
 
+def get_stockprices(symbols, chartrange='1y'):
+    '''Get stock data (key stats and previous) from IEX.
+    Just deal with IEX's 99 stocks limit per request.
+    '''
+    partlen = 99
+    result = {}
+
+    def get_chart(symbols):
+        charts = iexfinance.Stock(symbols).get_chart(range=chartrange)
+        result = {}
+        for symbol, obj in charts.items():
+            df = pd.DataFrame(
+                obj,
+                columns=('date', 'open', 'high', 'low', 'close', 'volume'),
+            ).set_index('date')
+            df.index = pd.to_datetime(df.index, utc=True)
+            result[symbol] = df
+        return result
+
+    result = {}
+    with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
+        tasks = []
+        for i in range(0, len(symbols), partlen):
+            part = symbols[i:i + partlen]
+            task = executor.submit(get_chart, part)
+            tasks.append(task)
+        
+        total_count = len(symbols)
+        report_percent = 10
+        processed = 0
+        for task in concurrent.futures.as_completed(tasks):
+            symbol_charts = task.result()
+            result.update(symbol_charts)
+            processed += len(symbol_charts)
+            percent = processed / total_count * 100
+            if percent >= report_percent:
+                print('{:.2f}% completed'.format(percent))
+                last_print_percent = percent
+                report_percent = (percent + 10.0) // 10 * 10
+            '''
+            except Exception as exc:
+                print('%r generated an exception: %s' % (url, exc))
+            else:
+                print('%r page is %d bytes' % (url, len(data)))
+            '''
+
+    return result
 
 class USEquityPricingLoader(PipelineLoader):
     """
@@ -37,34 +89,11 @@ class USEquityPricingLoader(PipelineLoader):
     Delegates loading of baselines and adjustments.
     """
 
-    def __init__(self, raw_price_loader, adjustments_loader):
-        # self.raw_price_loader = raw_price_loader
-        # self.adjustments_loader = adjustments_loader
-
-        # cal = self.raw_price_loader.trading_calendar or \
-        #     get_calendar("NYSE")
-
+    def __init__(self, asset_finder):
+        self._asset_finder = asset_finder
         cal = get_calendar('NYSE')
 
         self._all_sessions = cal.all_sessions
-
-    @classmethod
-    def from_files(cls, pricing_path, adjustments_path):
-        """
-        Create a loader from a bcolz equity pricing dir and a SQLite
-        adjustments path.
-
-        Parameters
-        ----------
-        pricing_path : str
-            Path to a bcolz directory written by a BcolzDailyBarWriter.
-        adjusments_path : str
-            Path to an adjusments db written by a SQLiteAdjustmentWriter.
-        """
-        return cls(
-            BcolzDailyBarReader(pricing_path),
-            SQLiteAdjustmentReader(adjustments_path)
-        )
 
     def load_adjusted_array(self, columns, dates, assets, mask):
         # load_adjusted_array is called with dates on which the user's algo
@@ -76,55 +105,47 @@ class USEquityPricingLoader(PipelineLoader):
             self._all_sessions, dates[0], dates[-1], shift=1,
         )
 
-        api = tradeapi.REST()
-        _from = start_date.strftime('%Y-%m-%d')
-        to = end_date.strftime('%Y-%m-%d')
         sessions = self._all_sessions
         sessions = sessions[(sessions >= start_date) & (sessions <= end_date)]
+
+        iex_symbols = [
+            symbol['symbol'] for symbol in iexfinance.get_available_symbols()
+        ]
+        asset_finder = self._asset_finder
+        asset_symbols = [
+            a.symbol for a in asset_finder.retrieve_all(assets)
+        ]
+        symbols = list(set(iex_symbols) & set(asset_symbols))
+        # print('len(symbols) = {}'.format(len(symbols)))
+        # TODO: dynamic "range"
+        prices = get_stockprices(symbols)
+
         dfs = []
-        for asset in assets:
-            df = api.polygon.historic_agg('day', asset.symbol, _from=_from, to=to).df
-            df = df.reindex(sessions, method='ffill')
+        for symbol in asset_symbols:
+            if symbol not in prices:
+                df = pd.DataFrame(
+                    {c.name: c.missing_value for c in columns}, 
+                    index=sessions
+                )
+            else:
+                df = prices[symbol]
+                df = df.reindex(sessions, method='ffill')
             dfs.append(df)
 
         raw_arrays = {}
         for c in columns:
             colname = c.name
-            raw_arrays[colname] = np.array([
+            raw_arrays[colname] = np.stack([
                 df[colname].values for df in dfs
-            ])
+            ], axis=-1)
         out = {}
         for c in columns:
             c_raw = raw_arrays[c.name]
             out[c] = AdjustedArray(
                 c_raw.astype(c.dtype),
                 mask,
-                [],
+                {},
                 c.missing_value
-            )
-        return out
-
-            
-        colnames = [c.name for c in columns]
-        raw_arrays = self.raw_price_loader.load_raw_arrays(
-            colnames,
-            start_date,
-            end_date,
-            assets,
-        )
-        adjustments = self.adjustments_loader.load_adjustments(
-            colnames,
-            dates,
-            assets,
-        )
-
-        out = {}
-        for c, c_raw, c_adjs in zip(columns, raw_arrays, adjustments):
-            out[c] = AdjustedArray(
-                c_raw.astype(c.dtype),
-                mask,
-                c_adjs,
-                c.missing_value,
             )
         return out
 
