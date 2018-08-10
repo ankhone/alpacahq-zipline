@@ -24,6 +24,8 @@ from zipline.errors import (
     SymbolNotFound,
 )
 
+from zipline.gens.brokers.alpaca_broker import ALPACABroker
+
 
 class AssetFinderAlpaca:
     """
@@ -33,8 +35,8 @@ class AssetFinderAlpaca:
     Right now it supports only equites.
     """
 
-    def __init__(self, broker):
-        self.broker = broker
+    def __init__(self, broker=None):
+        self.broker = broker or ALPACABroker()
 
     def clear_cache(self):
         del self.asset_cache

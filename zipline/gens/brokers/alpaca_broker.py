@@ -50,7 +50,7 @@ class ALPACABroker(Broker):
     streaming can possibly used too.
     '''
 
-    def __init__(self, uri):
+    def __init__(self, uri=None):
         self._api = tradeapi.REST()
 
     def subscribe_to_market_data(self, asset):
