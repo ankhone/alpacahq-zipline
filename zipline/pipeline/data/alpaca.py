@@ -57,21 +57,33 @@ def daily_cache(filename):
 
 @daily_cache(filename='polygon_companies.pkl')
 def polygon_companies(symbols, output='pandas'):
-    result = {}
-    with concurrent.futures.ThreadPoolExecutor(max_workers=100) as executor:
-        tasks = {
-            executor.submit(polygon_company, symbol): symbol
-            for symbol in symbols
+
+    def fetch(symbols):
+        api = tradeapi.REST()
+        response = api.polygon.get('/meta/symbols/company?symbols={}'.format(
+            ','.join(symbols)
+        ))
+        return {
+            o['symbol']: o for o in response
         }
+
+    result = {}
+    with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
+        tasks = []
+        partlen = 50
+        for i in range(0, len(symbols), partlen):
+            part = symbols[i:i+partlen]
+            tasks.append(
+                executor.submit(fetch, part)
+            )
         
         total_count = len(symbols)
         report_percent = 10
         processed = 0
         for task in concurrent.futures.as_completed(tasks):
-            symbol = tasks[task]
             task_result = task.result()
-            result[symbol] = task_result
-            processed += 1 # len(part_result)
+            result.update(task_result)
+            processed += len(task_result)
             percent = processed / total_count * 100
             if percent >= report_percent:
                 print('{:.2f}% completed'.format(percent))
