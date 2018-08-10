@@ -11,5 +11,5 @@ run:
 		-e APCA_API_SECRET_KEY \
 		-e APCA_API_BASE_URL \
 		-p 8888:8888 \
-		-v .zipline:/root/.zipline \
+		-v $(CURDIR)/.zipline:/root/.zipline \
 		-w /zipline --name $(NAME) $(REPO) bash
