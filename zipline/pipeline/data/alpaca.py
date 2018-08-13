@@ -84,12 +84,25 @@ def daily_cache(filename):
 def polygon_companies(symbols):
     def fetch(symbols):
         api = tradeapi.REST()
-        response = api.polygon.get('/meta/symbols/company?symbols={}'.format(
-            ','.join(symbols)
-        ))
+        params = {
+            'symbols': ','.join(symbols),
+        }
+        response = api.polygon.get('/meta/symbols/company', params=params)
         return {
             o['symbol']: o for o in response
         }
+
+    return parallelize(fetch, workers=25, splitlen=50)(symbols)
+
+
+@daily_cache(filename='polygon_financials.pkl')
+def polygon_financials(symbols):
+    def fetch(symbols):
+        api = tradeapi.REST()
+        params = {
+            'symbols': ','.join(symbols),
+        }
+        return api.polygon.get('/meta/symbols/financials', params=params)
 
     return parallelize(fetch, workers=25, splitlen=50)(symbols)
 
@@ -152,5 +165,31 @@ class CompanyWithFinancials(CustomFilter):
         out[:] = ary
 
 
-def IsPrimaryShare():
-    return USCompany() & CompanyWithFinancials()
+# def IsPrimaryShare():
+#     return USCompany() & CompanyWithFinancials()
+
+
+class IsPrimaryShare(CustomFilter):
+    inputs = ()
+    window_length = 1
+
+    def __init__(self, *args, **kwargs):
+        super(IsPrimaryShare, self).__init__(*args, **kwargs)
+        self._asset_finder = AssetFinderAlpaca()
+
+    def compute(self, today, sids, out, *inputs):
+        asset_finder = self._asset_finder
+        assets = asset_finder.retrieve_all(sids)
+        symbols = sorted([a.symbol for a in assets])
+        companies = polygon_companies(symbols)
+        financials = polygon_financials(symbols)
+        ary = np.array([
+            a.symbol in companies and
+            'country' in companies[a.symbol] and
+            [companies[a.symbol].get('country') == 'us'] and
+            a.symbol in financials and
+            len(financials[a.symbol]) > 0 and
+            financials[a.symbol][0].get('totalRevenue') is not None
+            for a in assets
+        ], dtype=bool)
+        out[:] = ary
