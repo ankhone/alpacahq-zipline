@@ -1,23 +1,22 @@
-import alpaca_trade_api as tradeapi
-import concurrent.futures
-import hashlib
-import iexfinance
-import logbook
 import numpy as np
-import pandas as pd
-import os
-import pickle
 
 from zipline.assets.assets_alpaca import AssetFinderAlpaca
 from zipline.pipeline.filters import CustomFilter
-from zipline.pipeline.data import polygon
+from zipline.pipeline.data.sources import polygon
 
 
 class IsPrimaryShare(CustomFilter):
     inputs = ()
     window_length = 1
 
+    def __init__(self, *args, **kwargs):
+        super(IsPrimaryShare, self).__init__(*args, **kwargs)
+        self._asset_finder = AssetFinderAlpaca()
+
     def compute(self, today, sids, out, *inputs):
+        asset_finder = self._asset_finder
+        assets = asset_finder.retrieve_all(sids)
+
         companies = polygon.companies()
         financials = polygon.financials()
         ary = np.array([

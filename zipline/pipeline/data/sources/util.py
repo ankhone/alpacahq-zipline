@@ -2,10 +2,10 @@ import alpaca_trade_api as tradeapi
 import concurrent.futures
 import hashlib
 import logbook
-import numpy as np
 import pandas as pd
 import os
 import pickle
+
 
 log = logbook.Logger(__name__)
 
@@ -76,39 +76,8 @@ def daily_cache(filename):
     return decorator
 
 
-def _all_symbols():
+def tradable_symbols():
     return [
         a.symbol for a in tradeapi.REST().list_assets()
         if a.tradable and a.status == 'active'
     ]
-
-
-@daily_cache(filename='polygon_companies.pkl')
-def companies():
-    all_symbols = _all_symbols()
-
-    def fetch(symbols):
-        api = tradeapi.REST()
-        params = {
-            'symbols': ','.join(symbols),
-        }
-        response = api.polygon.get('/meta/symbols/company', params=params)
-        return {
-            o['symbol']: o for o in response
-        }
-
-    return parallelize(fetch, workers=25, splitlen=50)(all_symbols)
-
-
-@daily_cache(filename='polygon_financials.pkl')
-def financials():
-    all_symbols = _all_symbols()
-
-    def fetch(symbols):
-        api = tradeapi.REST()
-        params = {
-            'symbols': ','.join(symbols),
-        }
-        return api.polygon.get('/meta/symbols/financials', params=params)
-
-    return parallelize(fetch, workers=25, splitlen=50)(all_symbols)

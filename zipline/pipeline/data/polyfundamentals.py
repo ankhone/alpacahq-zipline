@@ -27,7 +27,7 @@ class PolygonCompany(DataSet):
     "ceo": "Tim Cook",
     "url": "http://www.apple.com",
     "description": "Apple Inc. designs, manufactures, and markets mobile communication and media devices, personal computers, and portable digital music players to consumers...\n",
-    '''
+    '''  # noqa
 
     exchange = Column(object_dtype)
     symbol = Column(object_dtype)

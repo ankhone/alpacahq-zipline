@@ -19,7 +19,6 @@ from numpy import (
 import concurrent.futures
 import numpy as np
 
-import alpaca_trade_api as tradeapi
 import iexfinance
 import pandas as pd
 from zipline.data.us_equity_pricing import (
@@ -71,7 +70,6 @@ def get_stockprices(symbols, chart_range='1y'):
             percent = processed / total_count * 100
             if percent >= report_percent:
                 print('{:.2f}% completed'.format(percent))
-                last_print_percent = percent
                 report_percent = (percent + 10.0) // 10 * 10
 
     return result
